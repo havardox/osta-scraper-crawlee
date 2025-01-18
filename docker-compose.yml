@@ -1,0 +1,23 @@
+version: "3.9"
+
+volumes:
+  local-postgres-data:
+
+services:
+  osta_crawler:
+    image: havardox/osta_crawler:latest
+    container_name: osta_crawler
+    restart: "no"
+    network_mode: host
+    build:
+      context: .
+      dockerfile: ./compose/osta_crawler/Dockerfile
+      target: base
+      tags:
+        - havardox/osta_crawler:0.2.0
+    
+    volumes:
+      - .:/home/node/app/src
+      - /home/node/app
+    env_file:
+      - .envs/osta_crawler/dev.env

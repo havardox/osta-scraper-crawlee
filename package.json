@@ -1,0 +1,36 @@
+{
+    "name": "crawlee-test",
+    "version": "0.0.1",
+    "type": "module",
+    "description": "This is an example of a Crawlee project.",
+    "dependencies": {
+        "crawlee": "^3.0.0",
+        "playwright": "^1.42.1"
+    },
+    "devDependencies": {
+        "@apify/tsconfig": "^0.1.0",
+        "@types/node": "^20.0.0",
+        "@typescript-eslint/eslint-plugin": "^6.10.0",
+        "@typescript-eslint/parser": "^6.10.0",
+        "esbuild": "0.19.5",
+        "eslint": "^8.53.0",
+        "eslint-config-airbnb-base": "^15.0.0",
+        "eslint-config-airbnb-typescript": "^17.1.0",
+        "eslint-config-prettier": "^9.1.0",
+        "eslint-plugin-import": "^2.29.0",
+        "eslint-plugin-prettier": "^5.0.1",
+        "openapi-typescript": "^6.7.2",
+        "prettier": "3.1.0",
+        "typescript": "^5.2.2"
+    },
+    "scripts": {
+        "lint": "eslint src",
+        "lint:fix": "npm run lint -- --fix",
+        "build": "tsc && node esbuild.js",
+        "build:release": "npm run lint:fix & npm run build & wait",
+        "start": "node dist/out.js",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "author": "It's not you it's me",
+    "license": "ISC"
+}
