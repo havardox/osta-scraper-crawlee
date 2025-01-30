@@ -1,159 +1,101 @@
 import { createPlaywrightRouter } from 'crawlee';
-import type { Page } from 'playwright';
-import { openDataset } from './dataset';
+
+import cleanInnerHtml from './utils';
+import db from './db';
 
 const router = createPlaywrightRouter();
 
-interface Item {
-  shopName: string;
-  shopUrl: string;
-  categoryName: string;
-  foodName: string;
-  foodDescription: string;
-  regularPriceEur: number;
-  discountedPriceEur: number;
+const client = await db.connect();
+
+interface OstaItem {
+  url: string;
+  title: string;
+  description: string;
+  category: number | null;
 }
 
 router.addHandler('DETAIL', async ({ page, log }) => {
-  log.debug(`The page title is ${await page.title()}`);
+  const item: OstaItem = {
+    url: page.url(),
+    title: '',
+    description: '',
+    category: null,
+  };
 
-  const shopUrl = page.url();
-  const shopName =
-    (await page.locator('[data-test-id="venue-hero.venue-title"]').textContent()) ?? ''; // Assuming there's a way to grab the shop name
-  const itemsLocator = page.locator('[data-test-id="horizontal-item-card"]');
-
-  try {
-    await itemsLocator.first().waitFor({ timeout: 6000, state: 'attached' });
-  } catch (error) {
-    console.debug('Exception caught: Restaurant items not found.', error);
-    return;
+  const title = await page.locator('.header-title').first().textContent();
+  if (title) {
+    item.title = title.trim();
+    log.debug(`Title: ${item.title}`);
+  } else {
+    log.error('Title not found on page.');
   }
 
-  const categories = await page.locator('[data-test-id="MenuSection"]').all();
-  console.log(`Found the following categories: ${categories.length}`);
-  const result: Item[] = [];
+  const scriptContent = await page
+    .locator('script[type="text/javascript"]')
+    .evaluateAll((elements) => {
+      const script = elements.find((el) => el.textContent && el.textContent.includes('dataString'));
+      return script?.textContent || null;
+    });
 
-  /* eslint-disable no-restricted-syntax, no-await-in-loop */
-  for (const category of categories) {
-    const categoryName =
-      (await category.locator('[data-test-id="MenuSectionTitle"] h2').textContent()) ?? '';
-    const items = await category.locator('[data-test-id="horizontal-item-card"]').all();
+  if (scriptContent) {
+    log.debug(`Script content found: ${scriptContent.trim()}`);
 
-    for (const item of items) {
-      const foodName =
-        (await item.locator('[data-test-id="horizontal-item-card-header"]').textContent()) ?? '';
-      const foodDescription =
-        (await item.locator('[data-test-id="horizontal-item-card-header"] + p').textContent()) ??
-        '';
-
-      let regularPriceEur = 0;
-      let discountedPriceEur = 0;
-      const discountedPriceEurLocator = item.locator(
-        '[data-test-id="horizontal-item-card-discounted-price"]',
-      );
-      const discountedPriceEurExists = (await discountedPriceEurLocator.count()) > 0;
-      if (discountedPriceEurExists) {
-        discountedPriceEur = parseFloat(
-          ((await discountedPriceEurLocator.textContent()) ?? '')
-            .replace('€', '')
-            .replace(',', '.')
-            .trim(),
-        );
-        console.log(`The discounted price is ${discountedPriceEur}`);
-        regularPriceEur = parseFloat(
-          (
-            (await item
-              .locator('[data-test-id="horizontal-item-card-original-price"]')
-              .textContent()) ?? ''
-          )
-            .replace('€', '')
-            .replace(',', '.')
-            .trim(),
-        );
-      } else {
-        regularPriceEur = parseFloat(
-          ((await item.locator('[data-test-id="horizontal-item-card-price"]').textContent()) ?? '')
-            .replace('€', '')
-            .replace(',', '.')
-            .trim(),
-        );
-      }
-
-      result.push({
-        shopName,
-        shopUrl,
-        categoryName,
-        foodName,
-        foodDescription,
-        regularPriceEur,
-        discountedPriceEur,
-      });
+    const match = scriptContent.match(/"category_id",\s*value:\s*"(\d+)"/);
+    if (match) {
+      const mainCategoryId = match[1];
+      item.category = Number.parseInt(mainCategoryId, 10);
+      log.debug(`Extracted category_id: ${mainCategoryId.trim()}`);
+    } else {
+      log.debug('category_id not found in the script content.');
     }
-    console.log(`Finished parsing category: ${categoryName}`);
+  } else {
+    log.debug('No matching script tag found.');
   }
 
-  await (await openDataset()).pushData(result);
+  const description = await page.locator('.offer-details__description').first().innerHTML();
+  const cleanedDescription = cleanInnerHtml(description);
+  item.description = cleanedDescription;
+
+  await client.query(
+    `INSERT INTO records (url, title, description, category)
+     VALUES ($1, $2, $3, $4)`,
+    [item.url, item.title, item.description, item.category],
+  );
+
+  log.info(`Saved item: ${JSON.stringify(item)}`);
 });
 
-async function* scrollToBottom(page: Page) {
-  await page.locator('[data-test-id*="venueCard"]').first().waitFor({ timeout: 10000 });
-  let previousElementsCount = 0;
-  let continueScroll = true;
+router.addDefaultHandler(async ({ page, log, enqueueLinks }) => {
+  const bookUrls = await page.$$eval('.offer-thumb .offer-thumb__link', (elements: HTMLElement[]) =>
+    elements
+      .map((element) => element.getAttribute('href'))
+      .filter((href): href is string => Boolean(href))
+      .map((href) => `https://www.osta.ee/${href}`),
+  );
 
-  while (continueScroll) {
-    const venueCards = await page.$$eval('[data-test-id*="venueCard"]', (elements: HTMLElement[]) =>
-      elements.map((element: HTMLElement) => ({
-        href: element.getAttribute('href'),
-      })),
-    );
+  log.info(`Found ${bookUrls.length} book URLs to enqueue.`);
 
-    const currentElementsCount = venueCards.length;
+  await enqueueLinks({
+    urls: bookUrls,
+    label: 'DETAIL',
+  });
 
-    /* eslint-disable @typescript-eslint/no-loop-func */
-    await page.evaluate(() => {
-      window.scrollTo({
-        top: document.documentElement.scrollHeight,
-        behavior: 'smooth',
-      });
-    });
+  const pageUrl = await page.$eval('.next', (element: HTMLElement) => {
+    const href = element.getAttribute('href');
+    const baseUrl = `https://www.osta.ee/${href}`;
+    const url = new URL(baseUrl);
 
-    try {
-      await page
-        .locator(`[data-test-id*="venueCard"] >> nth=${currentElementsCount}`)
-        .waitFor({ timeout: 10000, state: 'attached' });
-    } catch (error) {
-      console.debug(
-        `Exception caught: No new elements found after ${currentElementsCount} elements. Stopping scroll.`,
-        error,
-      );
-      continueScroll = false;
-    }
+    const params = url.searchParams;
+    params.set('pagesize', '60');
+    params.set('orderby', 'createdd');
 
-    const newUrls = venueCards.slice(previousElementsCount).map((card: { href: any }) => card.href);
-    yield newUrls; // Yield the batch of new URLs
-    previousElementsCount = currentElementsCount;
-  }
-}
+    url.search = params.toString();
+    return url.toString();
+  });
 
-router.addDefaultHandler(async ({ request, enqueueLinks, page, log }) => {
-  log.debug(`Enqueueing from page: ${request.url}`);
-  const cookiesBtn = page.locator("[data-test-id='allow-button']");
-  try {
-    await cookiesBtn.waitFor({ timeout: 6000 });
-    await cookiesBtn.click();
-  } catch (error) {
-    console.debug('Exception caught: No cookie button found.', error);
-  }
-
-  const linkCount = 0;
-  for await (const urls of scrollToBottom(page)) {
-    await enqueueLinks({
-      urls,
-      label: 'DETAIL',
-    });
-  }
-
-  log.debug(`Found ${linkCount} number of links to restaurants.`);
+  await enqueueLinks({
+    urls: [pageUrl],
+  });
 });
 
 export default router;

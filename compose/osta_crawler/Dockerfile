@@ -1,7 +1,7 @@
 FROM node:21-bookworm-slim AS base
 
-ARG HOST_USER_UID=1000
-ARG HOST_USER_GID=1000
+ARG HOST_USER_UID=1001
+ARG HOST_USER_GID=1001
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/usr/bin
 ENV CRAWLEE_STORAGE_DIR=/home/node/app/src/dist/data
@@ -19,7 +19,7 @@ USER node
 
 WORKDIR /home/node/app
 
-COPY --chown=node:node package.json .
+COPY --chown=node:node package*.json .
 COPY --chown=node:node compose/osta_crawler/start.sh .
 
 RUN set -ex; \
@@ -28,6 +28,6 @@ RUN set -ex; \
 
 WORKDIR /home/node/app/src
  
-ENTRYPOINT ["compose/osta_crawler/entrypoint.sh"]
+ENTRYPOINT ["/home/node/app/src/compose/osta_crawler/entrypoint.sh"]
 
-CMD ["/home/node/app/start.sh"]
+CMD ["/home/node/app/src/compose/osta_crawler/start.sh"]

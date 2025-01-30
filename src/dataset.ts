@@ -1,7 +1,7 @@
 import { Dataset } from 'crawlee';
 
 export async function openDataset(): Promise<Dataset> {
-  const dataset = await Dataset.open('FoodDataset');
+  const dataset = await Dataset.open('OstaDataset');
   return dataset;
 }
 

@@ -8,7 +8,6 @@ services:
     image: havardox/osta_crawler:latest
     container_name: osta_crawler
     restart: "no"
-    network_mode: host
     build:
       context: .
       dockerfile: ./compose/osta_crawler/Dockerfile
@@ -21,3 +20,27 @@ services:
       - /home/node/app
     env_file:
       - .envs/osta_crawler/dev.env
+
+    depends_on:
+      osta_crawler_db:
+        condition: service_healthy
+      
+  osta_crawler_db:
+    image: postgres:13.5-alpine
+    container_name: osta_crawler_db 
+    restart: always
+    command: ["postgres", "-c", "log_statement=all"]
+    ports:
+    - "2475:2475"
+    volumes:
+      # - ./compose/postgres/db-init.sql:/docker-entrypoint-initdb.d/db-init.sql
+      - ./postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .envs/osta_crawler_db/dev.env
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host=localhost", "--username=postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_interval: 5s
+      start_period: 30s

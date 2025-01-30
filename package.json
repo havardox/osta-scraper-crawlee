@@ -1,15 +1,19 @@
 {
-    "name": "crawlee-test",
-    "version": "0.0.1",
+    "name": "osta-crawler",
+    "version": "1.0.0",
     "type": "module",
-    "description": "This is an example of a Crawlee project.",
+    "description": "Scrapes product data from osta.ee",
     "dependencies": {
         "crawlee": "^3.0.0",
+        "glob": "^11.0.1",
+        "pg": "^8.13.1",
         "playwright": "^1.42.1"
     },
     "devDependencies": {
         "@apify/tsconfig": "^0.1.0",
+        "@types/glob": "^8.1.0",
         "@types/node": "^20.0.0",
+        "@types/pg": "^8.11.11",
         "@typescript-eslint/eslint-plugin": "^6.10.0",
         "@typescript-eslint/parser": "^6.10.0",
         "esbuild": "0.19.5",
@@ -27,7 +31,9 @@
         "lint": "eslint src",
         "lint:fix": "npm run lint -- --fix",
         "build": "tsc && node esbuild.js",
+        "build:sql": "tsc && node esbuild.sql.js",
         "build:release": "npm run lint:fix & npm run build & wait",
+        "build:release:sql": "npm run lint:fix && npm run build:sql",
         "start": "node dist/out.js",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
